@@ -48,8 +48,7 @@ export class AppComponent implements OnInit {
   }
 
   public downloadFile(): Observable<Blob> {
-    const apiUrl = `https://localhost:7072/api/v1/File/Download_TSR_V3`;
-    //const apiUrl = `https://b9b8-103-166-187-181.ngrok-free.app/api/v1/File/DownloadTSROptimally`;
+    const apiUrl = `https://localhost:7072/api/v1/File/Download_TSR_V1`;
     return this.httpClient.get(apiUrl, { responseType: 'blob' });
   }
 

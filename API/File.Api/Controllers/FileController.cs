@@ -45,6 +45,8 @@ namespace File.Api.Controllers
             
             try
             {
+                _logger.LogInformation($"\nInvoking V2 API (FileStream) --->>>\n");
+
                 #region DB + CSV operation
                 var results = await ReadDataInBulkWithEfCore();
                 await SaveDataInCsv(results, filePath);
@@ -166,6 +168,8 @@ namespace File.Api.Controllers
         {
             try
             {
+                _logger.LogInformation($"\nInvoking V1 API (MemoryStream) --->>>\n");
+
                 var result = ExportData_V1();
 
                 if (result != null)
