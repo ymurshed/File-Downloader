@@ -1,0 +1,7 @@
+{
+    "/api": {
+      "target": "https://file-examples.com",
+      "secure": true,
+      "changeOrigin": true
+    }
+  }
