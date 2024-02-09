@@ -48,7 +48,7 @@ export class AppComponent implements OnInit {
   }
 
   public downloadFile(): Observable<Blob> {
-    const apiUrl = `https://localhost:7072/api/v1/File/Download_TSR_V1`;
+    const apiUrl = `https://localhost:7072/api/v1/File/Download_TSR_V2`;
     return this.httpClient.get(apiUrl, { responseType: 'blob' });
   }
 
