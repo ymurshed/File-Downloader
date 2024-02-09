@@ -35,9 +35,9 @@ namespace File.Api.Controllers
             _configurationManager = configurationManager;
         }
 
-        #region Using Thread + FS
-        [HttpGet("Download_TSR_V3")]
-        public async Task<ActionResult> Download_TSR_V3()
+        #region Using FileStream + Thread
+        [HttpGet("Download_TSR_V2")]
+        public async Task<ActionResult> Download_TSR_V2()
         {
             var fstart = DateTime.Now;
             var donwloadFileName = $"{Guid.NewGuid()}.csv";
@@ -78,8 +78,8 @@ namespace File.Api.Controllers
 
         private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCore()
         {
-            var batchSize = 1000;
-            var numberOfTasks = 4000;
+            var batchSize = 100000;
+            var numberOfTasks = 40;
 
             var tasks = new List<Task<List<TransmissionStatusReport>>>();
 
@@ -89,7 +89,7 @@ namespace File.Api.Controllers
             for (int i = 0; i < numberOfTasks; i++)
             {
                 var offset = i * batchSize;
-                Task<List<TransmissionStatusReport>> task = Task.Run(() => _tsrService.GetTsrRecords(offset, batchSize));
+                Task<List<TransmissionStatusReport>> task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, batchSize));
                 tasks.Add(task);
             }
 
@@ -123,7 +123,7 @@ namespace File.Api.Controllers
                     var offset = i * batchSize;
                     var query = $"select * from [SafetyReporting].[dbo].[TransmissionStatusReport] order by Id offset {offset} rows fetch next {batchSize} rows only;";
 
-                    tasks.Add(_tsrService.GetTsrRecordsUsingSqlCommand(connection, query));
+                    tasks.Add(_tsrService.GetRecordsUsingSqlCommand(connection, query));
                 }
 
                 results = await Task.WhenAll(tasks);
@@ -159,72 +159,7 @@ namespace File.Api.Controllers
         }
         #endregion
 
-        #region Using FileStream
-        [HttpGet("Download_TSR_V2")]
-        public async Task<ActionResult> Download_TSR_V2()
-        {
-            var fstart = DateTime.Now;
-            var donwloadFileName = $"{Guid.NewGuid()}.csv";
-            var filePath = Path.Join(_hostingEnvironment.ContentRootPath, "wwwroot", donwloadFileName);
-
-            try
-            {
-                await ExportData_V2(donwloadFileName);
-                _logger.LogInformation($"Start sending filestream at: {fstart}");
-
-                var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None, 4096, FileOptions.DeleteOnClose);
-                var fileStreamResult = new FileStreamResult(fileStream, FileType)
-                {
-                    FileDownloadName = donwloadFileName,
-                    EnableRangeProcessing = true // Enable range requests for resumable downloads
-                };
-
-                return fileStreamResult;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError("\nError in file download".ToString() + ex.Message + "\n", ex.Message);
-                return Content("Error occurred while processing the file.");
-            }
-            finally
-            {
-                var fend = DateTime.Now;
-                var totalTime = (fend - fstart).TotalSeconds;
-                _logger.LogInformation($"Completed sending filestream at: {fend}. Total time in secs: {totalTime}");
-            }
-        }
-
-        private async Task ExportData_V2(string donwloadFileName)
-        {
-            #region DB operation
-            var startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime}\n");
-
-            var transmissionStatusReports = _tsrService.GetQueryableTsrRecords().ToList();
-
-            var endTime = DateTime.Now;
-            _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
-            #endregion
-
-            #region CSV operation
-            startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted writing data in CSV at: {startTime}\n");
-
-            var filePath = Path.Join(_hostingEnvironment.ContentRootPath, "wwwroot", donwloadFileName);
-
-            using (var fileStream = new FileStream(filePath, FileMode.Create))
-            {
-                using var writer = new StreamWriter(fileStream);
-                using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture));
-                await csv.WriteRecordsAsync(transmissionStatusReports);
-            }
-
-            endTime = DateTime.Now;
-            _logger.LogInformation($"\nCompleted writing data in CSV at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
-            #endregion 
-        }
-        #endregion
-
+        
         #region Using MemoryStream
         [HttpGet("Download_TSR_V1")]
         public IActionResult Download_TSR_V1()
@@ -259,7 +194,7 @@ namespace File.Api.Controllers
             var startTime = DateTime.Now;
             _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime}\n");
 
-            var transmissionStatusReports = _tsrService.GetQueryableTsrRecords().ToList();
+            var transmissionStatusReports = _tsrService.GetRecords().ToList();
 
             var endTime = DateTime.Now;
             _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
