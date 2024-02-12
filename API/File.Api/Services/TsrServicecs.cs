@@ -28,7 +28,14 @@ namespace File.Api.Services
             var data = context.TransmissionStatusReports.AsQueryable().OrderBy(x => x.Id).Skip(skipCount).Take(takeCount).ToList();
             return data;
         }
-        
+
+        public async Task<List<TransmissionStatusReport>> GetRecordsWithContextFactoryAsync(int skipCount = 0, int takeCount = 0)
+        {
+            using var context = _contextFactory.CreateDbContext();
+            var data = await context.TransmissionStatusReports.AsQueryable().OrderBy(x => x.Id).Skip(skipCount).Take(takeCount).ToListAsync();
+            return data;
+        }
+
         public async Task<IList<TransmissionStatusReport>> GetRecordsUsingSqlCommand(SqlConnection sqlConnection, string query)
         {
             var records = new List<TransmissionStatusReport>();

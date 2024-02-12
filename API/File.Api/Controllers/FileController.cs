@@ -48,7 +48,7 @@ namespace File.Api.Controllers
                 _logger.LogInformation($"\nInvoking V2 API (FileStream) --->>>\n");
 
                 #region DB + CSV operation
-                var results = await ReadDataInBulkWithEfCore();
+                var results = await ReadDataInBulkWithEfCoreAsync();
                 await SaveDataInCsv(results, filePath);
                 #endregion
 
@@ -78,7 +78,7 @@ namespace File.Api.Controllers
             }
         }
 
-        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCore()
+        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCoreAsync(bool useAsyncDbCall = true)
         {
             var batchSize = 100000;
             var numberOfTasks = 40;
@@ -91,8 +91,17 @@ namespace File.Api.Controllers
             for (int i = 0; i < numberOfTasks; i++)
             {
                 var offset = i * batchSize;
-                Task<List<TransmissionStatusReport>> task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, batchSize));
-                tasks.Add(task);
+                
+                if (useAsyncDbCall)
+                {
+                    var task = Task.Run(async () => await _tsrService.GetRecordsWithContextFactoryAsync(offset, batchSize));
+                    tasks.Add(task);
+                }
+                else
+                {
+                    var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, batchSize));
+                    tasks.Add(task);
+                }
             }
 
             var results = await Task.WhenAll(tasks);
