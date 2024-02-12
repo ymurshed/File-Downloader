@@ -86,7 +86,7 @@ namespace File.Api.Controllers
             var tasks = new List<Task<List<TransmissionStatusReport>>>();
 
             var startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime}\n");
+            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {batchSize}, numberOfTasks = {numberOfTasks}, total rows = {batchSize * numberOfTasks}.\n");
 
             for (int i = 0; i < numberOfTasks; i++)
             {
@@ -189,6 +189,7 @@ namespace File.Api.Controllers
 
         private object ExportData_V1()
         {
+            var batchSize = 4000000;
             var stream = new MemoryStream();
 
             var writeFile = new StreamWriter(stream);
@@ -196,9 +197,9 @@ namespace File.Api.Controllers
 
             #region DB operation
             var startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime}\n");
+            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {batchSize}.\n");
 
-            var transmissionStatusReports = _tsrService.GetRecords().ToList();
+            var transmissionStatusReports = _tsrService.GetRecords(batchSize).ToList();
 
             var endTime = DateTime.Now;
             _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
