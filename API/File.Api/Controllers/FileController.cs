@@ -42,14 +42,33 @@ namespace File.Api.Controllers
             var fstart = DateTime.Now;
             var donwloadFileName = $"{Guid.NewGuid()}.csv";
             var filePath = Path.Join(_hostingEnvironment.ContentRootPath, "wwwroot", donwloadFileName);
-            
+
             try
             {
                 _logger.LogInformation($"\nInvoking V2 API (FileStream) --->>>\n");
 
                 #region DB + CSV operation
-                var results = await ReadDataInBulkWithEfCoreAsync();
-                await SaveDataInCsv(results, filePath);
+                var startOffset = 0;
+                var count = _tsrService.GetRecordCount();
+                
+                while (startOffset < count)
+                {
+                    var taskModels = await ReadDataInBulkWithEfCoreAsync(startOffset);
+                    var results = taskModels.OrderBy(x => x.TaskId).Select(x => x.Tsr!.Result).ToArray();
+
+                    if (results == null || !results.Any()) break;
+
+                    if (startOffset == 0)
+                    {
+                        await SaveDataInCsv(results, filePath, true);
+                    }
+                    else 
+                    {
+                        await SaveDataInCsv(results, filePath);
+                    }
+
+                    startOffset += results.Sum(x => x.Count);
+                }
                 #endregion
 
                 #region Send file stream
@@ -78,38 +97,41 @@ namespace File.Api.Controllers
             }
         }
 
-        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCoreAsync(bool useAsyncDbCall = true)
+        private async Task<IList<TaskModel>> ReadDataInBulkWithEfCoreAsync(int startOffset, bool useAsyncDbCall = false)
         {
-            var batchSize = 100000;
-            var numberOfTasks = 40;
-
-            var tasks = new List<Task<List<TransmissionStatusReport>>>();
-
+            var batchSize = 400000;
+            var numberOfTasks = 10;
+            
+            var taskModels = new List<TaskModel>();
+            
             var startTime = DateTime.Now;
             _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {batchSize}, numberOfTasks = {numberOfTasks}, total rows = {batchSize * numberOfTasks}.\n");
 
             for (int i = 0; i < numberOfTasks; i++)
             {
-                var offset = i * batchSize;
+                var offset = startOffset + (i * batchSize);
                 
-                if (useAsyncDbCall)
+                if (useAsyncDbCall) // slower
                 {
                     var task = Task.Run(async () => await _tsrService.GetRecordsWithContextFactoryAsync(offset, batchSize));
-                    tasks.Add(task);
+                    var taskModel = new TaskModel(i, offset, batchSize, task);
+                    taskModels.Add(taskModel);
                 }
-                else
+                else // faster
                 {
                     var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, batchSize));
-                    tasks.Add(task);
+                    var taskModel = new TaskModel(i, offset, batchSize, task);
+                    taskModels.Add(taskModel);
                 }
             }
 
-            var results = await Task.WhenAll(tasks);
+            var allTasks = taskModels.Select(x => x.Tsr).ToArray();
+            var results = await Task.WhenAll(allTasks!);
 
             var endTime = DateTime.Now;
             _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
 
-            return results;
+            return taskModels;
         }
 
         private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithSqlCommand()
@@ -146,27 +168,32 @@ namespace File.Api.Controllers
             return results;
         }
 
-        private async Task SaveDataInCsv(IList<TransmissionStatusReport>[]? results, string filePath)
+        private async Task SaveDataInCsv(List<TransmissionStatusReport>[] results, string filePath, bool isFirstBatch = false)
         {
-            if (results != null && results.Any())
+            var startTime = DateTime.Now;
+            _logger.LogInformation($"\nStarted writing data in CSV file at: {startTime}\n");
+
+            using (var fileStream = new FileStream(filePath, FileMode.Append))
             {
-                var startTime = DateTime.Now;
-                _logger.LogInformation($"\nStarted writing data in CSV file at: {startTime}\n");
+                using var writer = new StreamWriter(fileStream);
 
-                using (var fileStream = new FileStream(filePath, FileMode.Append))
+                var csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture) { HasHeaderRecord = false };
+
+                if (isFirstBatch) 
                 {
-                    using var writer = new StreamWriter(fileStream);
-                    using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture));
-
-                    foreach (var result in results)
-                    {
-                        await csv.WriteRecordsAsync(result);
-                    }
+                    csvConfig = new CsvConfiguration(CultureInfo.InvariantCulture);
                 }
+                
+                using var csv = new CsvWriter(writer, csvConfig);
 
-                var endTime = DateTime.Now;
-                _logger.LogInformation($"\nCompleted writing data in CSV file at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
+                foreach (var result in results)
+                {
+                    await csv.WriteRecordsAsync(result);
+                }
             }
+
+            var endTime = DateTime.Now;
+            _logger.LogInformation($"\nCompleted writing data in CSV file at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
         }
         #endregion
 

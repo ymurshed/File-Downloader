@@ -16,6 +16,11 @@ namespace File.Api.Services
             _contextFactory = contextFactory;
         }
 
+        public int GetRecordCount()
+        {
+            return _reportingContext.TransmissionStatusReports.Count();
+        }
+
         public IQueryable<TransmissionStatusReport> GetRecords(int takeCount = 4000000)
         {
             var data = _reportingContext.TransmissionStatusReports.AsQueryable().OrderBy(x => x.Id).Take(takeCount);
