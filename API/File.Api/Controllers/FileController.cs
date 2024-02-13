@@ -104,8 +104,6 @@ namespace File.Api.Controllers
 
         private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCoreAsync(int startOffset, bool useAsyncDbCall = false)
         {
-            var taskModels = new List<TaskModel>();
-
             Task<List<TransmissionStatusReport>>?[] taskList = new Task<List<TransmissionStatusReport>>[NumberOfTasks];
 
             var startTime = DateTime.Now;
