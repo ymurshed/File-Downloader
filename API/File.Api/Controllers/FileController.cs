@@ -16,6 +16,11 @@ namespace File.Api.Controllers
     {
         #region constans
         public const string FileType = "text/csv";
+
+        public bool FetchFullData = false;
+        public int IterationCount = 3;
+        public int BatchSize = 400000;
+        public int NumberOfTasks = 10;
         
         private ITsrService _tsrService { get; set; }
         public ILogger<FileController> _logger { get; set; }
@@ -49,7 +54,8 @@ namespace File.Api.Controllers
 
                 #region DB + CSV operation
                 var startOffset = 0;
-                var count = _tsrService.GetRecordCount();
+
+                var count = FetchFullData ? _tsrService.GetRecordCount() : IterationCount * NumberOfTasks * BatchSize;
                 
                 while (startOffset < count)
                 {
@@ -99,28 +105,25 @@ namespace File.Api.Controllers
 
         private async Task<IList<TaskModel>> ReadDataInBulkWithEfCoreAsync(int startOffset, bool useAsyncDbCall = false)
         {
-            var batchSize = 400000;
-            var numberOfTasks = 10;
-            
             var taskModels = new List<TaskModel>();
             
             var startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {batchSize}, numberOfTasks = {numberOfTasks}, total rows = {batchSize * numberOfTasks}.\n");
+            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {BatchSize}, numberOfTasks = {NumberOfTasks}, total rows = {BatchSize * NumberOfTasks}.\n");
 
-            for (int i = 0; i < numberOfTasks; i++)
+            for (int i = 0; i < NumberOfTasks; i++)
             {
-                var offset = startOffset + (i * batchSize);
+                var offset = startOffset + (i * BatchSize);
                 
                 if (useAsyncDbCall) // slower
                 {
-                    var task = Task.Run(async () => await _tsrService.GetRecordsWithContextFactoryAsync(offset, batchSize));
-                    var taskModel = new TaskModel(i, offset, batchSize, task);
+                    var task = Task.Run(async () => await _tsrService.GetRecordsWithContextFactoryAsync(offset, BatchSize));
+                    var taskModel = new TaskModel(i, offset, BatchSize, task);
                     taskModels.Add(taskModel);
                 }
                 else // faster
                 {
-                    var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, batchSize));
-                    var taskModel = new TaskModel(i, offset, batchSize, task);
+                    var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, BatchSize));
+                    var taskModel = new TaskModel(i, offset, BatchSize, task);
                     taskModels.Add(taskModel);
                 }
             }
@@ -225,7 +228,6 @@ namespace File.Api.Controllers
 
         private object ExportData_V1()
         {
-            var batchSize = 4000000;
             var stream = new MemoryStream();
 
             var writeFile = new StreamWriter(stream);
@@ -233,9 +235,9 @@ namespace File.Api.Controllers
 
             #region DB operation
             var startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {batchSize}.\n");
+            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {BatchSize}.\n");
 
-            var transmissionStatusReports = _tsrService.GetRecords(batchSize).ToList();
+            var transmissionStatusReports = _tsrService.GetRecords(BatchSize).ToList();
 
             var endTime = DateTime.Now;
             _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
