@@ -15,7 +15,7 @@ namespace File.Api.Controllers
         #region constans
         public const string FileType = "text/csv";
 
-        public bool FetchFullData = false;
+        public bool FetchFullData = true;
         public int IterationCount = 1;
         public int BatchSize = 400000;
         public int NumberOfTasks = 10;
@@ -70,9 +70,9 @@ namespace File.Api.Controllers
                     {
                         await SaveDataInCsv(results, filePath);
                     }
-
-                    Console.WriteLine("Current offset: " + startOffset);
+                    
                     startOffset += results.Sum(x => x.Count);
+                    Console.WriteLine("Total data fetched: " + startOffset);
                 }
                 #endregion
 
@@ -104,9 +104,9 @@ namespace File.Api.Controllers
             }
         }
 
-        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCoreAsync(int startOffset)
+        private async Task<IList<TransmissionStatusReportShort>[]?> ReadDataInBulkWithEfCoreAsync(int startOffset)
         {
-            Task<List<TransmissionStatusReport>>?[] taskList = new Task<List<TransmissionStatusReport>>[NumberOfTasks];
+            Task<List<TransmissionStatusReportShort>>?[] taskList = new Task<List<TransmissionStatusReportShort>>[NumberOfTasks];
 
             var startTime = DateTime.Now;
             _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime} using batchSize = {BatchSize}, numberOfTasks = {NumberOfTasks}, total rows = {BatchSize * NumberOfTasks}.\n");
@@ -114,7 +114,7 @@ namespace File.Api.Controllers
             for (int i = 0; i < NumberOfTasks; i++)
             {
                 var offset = startOffset + (i * BatchSize);
-                var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, BatchSize)); 
+                var task = Task.Run(() => _tsrService.GetUdfRecords(offset, BatchSize)); 
                 taskList[i] = task;
             }
 
@@ -128,7 +128,7 @@ namespace File.Api.Controllers
             return results;
         }
 
-        private async Task SaveDataInCsv(IList<TransmissionStatusReport>[] results, string filePath, bool isFirstBatch = false)
+        private async Task SaveDataInCsv(IList<TransmissionStatusReportShort>[] results, string filePath, bool isFirstBatch = false)
         {
             var startTime = DateTime.Now;
             _logger.LogInformation($"\nStarted writing data in CSV file at: {startTime}\n");

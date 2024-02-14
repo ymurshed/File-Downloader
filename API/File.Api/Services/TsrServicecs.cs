@@ -25,9 +25,11 @@ namespace File.Api.Services
             return data;
         }
 
-        public List<TransmissionStatusReportShort> GetUdfRecords(bool showMostRecent = true)
+        public List<TransmissionStatusReportShort> GetUdfRecords(int skipCount = 0, int takeCount = 0, bool showMostRecent = false)
         {
-            return _reportingContext.udf_GetTransmissionStatusReport(showMostRecent).ToList();
+            using var context = _contextFactory.CreateDbContext();
+            var data = context.udf_GetTransmissionStatusReport(showMostRecent).OrderBy(x => x.Id).Skip(skipCount).Take(takeCount).ToList();
+            return data;
         }
 
         public List<TransmissionStatusReport> GetRecordsWithContextFactory(int skipCount = 0, int takeCount = 0)
