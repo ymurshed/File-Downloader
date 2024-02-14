@@ -23,9 +23,16 @@ namespace File.Api.Models
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            var cs = "Server=localhost;Database=SafetyReporting;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
+            var cs = "Server=PHLDWWCGDB06.eplnet.wan;Database=prod_janssenSafetyReporting_01_bk;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true;";
             optionsBuilder.UseSqlServer(cs, x => x.CommandTimeout(1800));
         }
+
+        //user defined functions
+        public IQueryable<TransmissionStatusReportShort> udf_GetTransmissionStatusReport(bool showMostRecent)
+                  => FromExpression(() => udf_GetTransmissionStatusReport(showMostRecent));
+
+        public IQueryable<TransmissionStatusReportShort> udf_GetTransmissionStatusReport_Limited(string identityId, bool showMostRecent)
+          => FromExpression(() => udf_GetTransmissionStatusReport_Limited(identityId, showMostRecent));
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -118,6 +125,9 @@ namespace File.Api.Models
 
                 entity.Property(e => e.UserName).HasMaxLength(255);
             });
+
+            modelBuilder.HasDbFunction(typeof(ReportingContext).GetMethod(nameof(udf_GetTransmissionStatusReport), new[] { typeof(bool) })!).HasName("udf_GetTransmissionStatusReport");
+            modelBuilder.HasDbFunction(typeof(ReportingContext).GetMethod(nameof(udf_GetTransmissionStatusReport_Limited), new[] { typeof(string), typeof(bool) })!).HasName("udf_GetTransmissionStatusReport_Limited");
 
             OnModelCreatingPartial(modelBuilder);
         }

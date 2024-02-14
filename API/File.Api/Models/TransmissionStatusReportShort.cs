@@ -4,6 +4,9 @@ namespace File.Api.Models
 {
     public class TransmissionStatusReportShort
     {
+        [Description("Id")]
+        public long Id { get; set; }
+
         [Description("DocumentName")]
         public string DocumentName { get; set; }
 

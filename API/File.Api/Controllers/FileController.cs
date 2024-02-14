@@ -3,8 +3,6 @@ using CsvHelper.Configuration;
 using File.Api.Models;
 using File.Api.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using IHostingEnvironment = Microsoft.Extensions.Hosting.IHostEnvironment;
 
@@ -21,6 +19,7 @@ namespace File.Api.Controllers
         public int IterationCount = 1;
         public int BatchSize = 400000;
         public int NumberOfTasks = 10;
+        public static double TotalTime = 0;
         
         private ITsrService _tsrService { get; set; }
         public ILogger<FileController> _logger { get; set; }
@@ -67,14 +66,17 @@ namespace File.Api.Controllers
                     {
                         await SaveDataInCsv(results, filePath, true);
                     }
-                    else 
+                    else
                     {
                         await SaveDataInCsv(results, filePath);
                     }
 
+                    Console.WriteLine("Current offset: " + startOffset);
                     startOffset += results.Sum(x => x.Count);
                 }
                 #endregion
+
+                Console.WriteLine("Total time to fetch data in sec: " + TotalTime);
 
                 #region Send file stream
                 _logger.LogInformation($"Start sending filestream at: {fstart}");
@@ -102,7 +104,7 @@ namespace File.Api.Controllers
             }
         }
 
-        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCoreAsync(int startOffset, bool useAsyncDbCall = false)
+        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithEfCoreAsync(int startOffset)
         {
             Task<List<TransmissionStatusReport>>?[] taskList = new Task<List<TransmissionStatusReport>>[NumberOfTasks];
 
@@ -112,57 +114,16 @@ namespace File.Api.Controllers
             for (int i = 0; i < NumberOfTasks; i++)
             {
                 var offset = startOffset + (i * BatchSize);
-                
-                if (useAsyncDbCall) // slower
-                {
-                    var task = Task.Run(async () => await _tsrService.GetRecordsWithContextFactoryAsync(offset, BatchSize));
-                    taskList[i] = task;
-                }
-                else // faster
-                {
-                    var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, BatchSize));
-                    taskList[i] = task;
-                }
+                var task = Task.Run(() => _tsrService.GetRecordsWithContextFactory(offset, BatchSize)); 
+                taskList[i] = task;
             }
 
             var results = await Task.WhenAll(taskList!);
 
             var endTime = DateTime.Now;
-            _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
-
-            return results;
-        }
-
-        private async Task<IList<TransmissionStatusReport>[]?> ReadDataInBulkWithSqlCommand()
-        {
-            var batchSize = 500000;
-            var numberOfTasks = 4;
-
-            IList<TransmissionStatusReport>[]? results = null;
-            var tasks = new List<Task<IList<TransmissionStatusReport>>>();
-            
-            var connectionString = _configurationManager.GetConnectionString("ReportingConnection");
-
-            var startTime = DateTime.Now;
-            _logger.LogInformation($"\nStarted reading data from TSR table at: {startTime}\n");
-
-            using (var connection = new SqlConnection(connectionString)) 
-            {
-                await connection.OpenAsync();
-
-                for (int i = 0; i < numberOfTasks; i++)
-                {
-                    var offset = i * batchSize;
-                    var query = $"select * from [SafetyReporting].[dbo].[TransmissionStatusReport] order by Id offset {offset} rows fetch next {batchSize} rows only;";
-
-                    tasks.Add(_tsrService.GetRecordsUsingSqlCommand(connection, query));
-                }
-
-                results = await Task.WhenAll(tasks);
-            }
-
-            var endTime = DateTime.Now;
-            _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {(endTime - startTime).TotalSeconds} secs.\n");
+            var total = (endTime - startTime).TotalSeconds;
+            TotalTime += total;
+            _logger.LogInformation($"\nCompleted reading data from TSR table at: {endTime}. Total time taken: {total} secs.\n");
 
             return results;
         }
